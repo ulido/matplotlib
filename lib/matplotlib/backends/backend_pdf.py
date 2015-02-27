@@ -449,7 +449,10 @@ class PdfFile(object):
         self.resourceObject = self.reserveObject('resources')
 
         root = {'Type': Name('Catalog'),
-                'Pages': self.pagesObject}
+                'Pages': self.pagesObject,
+                'Group': {'Type': Name('Group'),
+                          'S': Name('Transparency'),
+                          'CS': Name('DeviceRGB')}}
         self.writeObject(self.rootObject, root)
 
         revision = ''
@@ -508,9 +511,6 @@ class PdfFile(object):
                    'Resources': self.resourceObject,
                    'MediaBox': [0, 0, 72 * width, 72 * height],
                    'Contents': contentObject,
-                   'Group': {'Type': Name('Group'),
-                             'S': Name('Transparency'),
-                             'CS': Name('DeviceRGB')},
                    'Annots': self.pageAnnotations,
                    }
         pageObject = self.reserveObject('page')
