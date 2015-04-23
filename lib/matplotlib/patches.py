@@ -102,8 +102,7 @@ class Patch(artist.Artist):
 
         self._fill = True  # needed for set_facecolor call
         if color is not None:
-            if (edgecolor is not None or
-                facecolor is not None):
+            if (edgecolor is not None or facecolor is not None):
                 import warnings
                 warnings.warn("Setting the 'color' property will override"
                               "the edgecolor or facecolor properties. ")
@@ -286,8 +285,8 @@ class Patch(artist.Artist):
         """
         if color is None:
             color = mpl.rcParams['patch.facecolor']
-        self._original_facecolor = color  # save: otherwise changing _fill
-                                          # may lose alpha information
+        # save: otherwise changing _fill may lose alpha information
+        self._original_facecolor = color
         self._facecolor = colors.colorConverter.to_rgba(color, self._alpha)
         if not self._fill:
             self._facecolor = list(self._facecolor)
@@ -323,8 +322,8 @@ class Patch(artist.Artist):
             except TypeError:
                 raise TypeError('alpha must be a float or None')
         artist.Artist.set_alpha(self, alpha)
-        self.set_facecolor(self._original_facecolor)  # using self._fill and
-                                                      # self._alpha
+        # using self._fill and self._alpha
+        self.set_facecolor(self._original_facecolor)
         self.set_edgecolor(self._original_edgecolor)
 
     def set_linewidth(self, w):
@@ -335,7 +334,7 @@ class Patch(artist.Artist):
         """
         if w is None:
             w = mpl.rcParams['patch.linewidth']
-        self._linewidth = w
+        self._linewidth = float(w)
 
     def set_lw(self, lw):
         """alias for set_linewidth"""
@@ -381,8 +380,8 @@ class Patch(artist.Artist):
         """
         s = s.lower()
         if s not in self.validCap:
-            raise ValueError('set_capstyle passed "%s";\n' % (s,)
-                             + 'valid capstyles are %s' % (self.validCap,))
+            raise ValueError('set_capstyle passed "%s";\n' % (s,) +
+                             'valid capstyles are %s' % (self.validCap,))
         self._capstyle = s
 
     def get_capstyle(self):
@@ -397,8 +396,8 @@ class Patch(artist.Artist):
         """
         s = s.lower()
         if s not in self.validJoin:
-            raise ValueError('set_joinstyle passed "%s";\n' % (s,)
-                             + 'valid joinstyles are %s' % (self.validJoin,))
+            raise ValueError('set_joinstyle passed "%s";\n' % (s,) +
+                             'valid joinstyles are %s' % (self.validJoin,))
         self._joinstyle = s
 
     def get_joinstyle(self):
@@ -1049,9 +1048,14 @@ class Arrow(Patch):
         %(Patch)s
         """
         Patch.__init__(self, **kwargs)
-        L = np.sqrt(dx ** 2 + dy ** 2) or 1  # account for div by zero
-        cx = float(dx) / L
-        sx = float(dy) / L
+        L = np.hypot(dx, dy)
+
+        if L != 0:
+            cx = float(dx) / L
+            sx = float(dy) / L
+        else:
+            # Account for division by zero
+            cx, sx = 0, 1
 
         trans1 = transforms.Affine2D().scale(L, width)
         trans2 = transforms.Affine2D.from_values(cx, sx, -sx, cx, 0.0, 0.0)
@@ -1076,8 +1080,8 @@ class FancyArrow(Polygon):
 
     @docstring.dedent_interpd
     def __init__(self, x, y, dx, dy, width=0.001, length_includes_head=False,
-        head_width=None, head_length=None, shape='full', overhang=0,
-        head_starts_at_zero=False, **kwargs):
+                 head_width=None, head_length=None, shape='full', overhang=0,
+                 head_starts_at_zero=False, **kwargs):
         """
         Constructor arguments
           *width*: float (default: 0.001)
@@ -1112,7 +1116,8 @@ class FancyArrow(Polygon):
         if head_length is None:
             head_length = 1.5 * head_width
 
-        distance = np.sqrt(dx ** 2 + dy ** 2)
+        distance = np.hypot(dx, dy)
+
         if length_includes_head:
             length = distance
         else:
@@ -1123,19 +1128,19 @@ class FancyArrow(Polygon):
             # start by drawing horizontal arrow, point at (0,0)
             hw, hl, hs, lw = head_width, head_length, overhang, width
             left_half_arrow = np.array([
-               [0.0, 0.0],                  # tip
+                [0.0, 0.0],                  # tip
                 [-hl, -hw / 2.0],             # leftmost
                 [-hl * (1 - hs), -lw / 2.0],  # meets stem
                 [-length, -lw / 2.0],          # bottom left
                 [-length, 0],
             ])
-            #if we're not including the head, shift up by head length
+            # if we're not including the head, shift up by head length
             if not length_includes_head:
                 left_half_arrow += [head_length, 0]
-            #if the head starts at 0, shift up by another head length
+            # if the head starts at 0, shift up by another head length
             if head_starts_at_zero:
                 left_half_arrow += [head_length / 2.0, 0]
-            #figure out the shape, and complete accordingly
+            # figure out the shape, and complete accordingly
             if shape == 'left':
                 coords = left_half_arrow
             else:
@@ -1150,8 +1155,12 @@ class FancyArrow(Polygon):
                                              right_half_arrow[-2::-1]])
                 else:
                     raise ValueError("Got unknown shape: %s" % shape)
-            cx = float(dx) / distance
-            sx = float(dy) / distance
+            if distance != 0:
+                cx = float(dx) / distance
+                sx = float(dy) / distance
+            else:
+                #Account for division by zero
+                cx, sx = 0, 1
             M = np.array([[cx, sx], [-sx, cx]])
             verts = np.dot(coords, M) + (x + dx, y + dy)
 
@@ -1517,7 +1526,7 @@ class Arc(Ellipse):
         inv_error = (1.0 / 1.89818e-6) * 0.5
 
         if width < inv_error and height < inv_error:
-            #self._path = Path.arc(self.theta1, self.theta2)
+            # self._path = Path.arc(self.theta1, self.theta2)
             return Patch.draw(self, renderer)
 
         def iter_circle_intersect_on_line(x0, y0, x1, y1):
@@ -1641,7 +1650,7 @@ def bbox_artist(artist, renderer, props=None, fill=True):
                   width=w,
                   height=h,
                   fill=fill,
-                 )
+                  )
     r.set_transform(transforms.IdentityTransform())
     r.set_clip_on(False)
     r.update(props)
@@ -1662,7 +1671,7 @@ def draw_bbox(bbox, renderer, color='k', trans=None):
                   height=h,
                   edgecolor=color,
                   fill=False,
-                 )
+                  )
     if trans is not None:
         r.set_transform(trans)
     r.set_clip_on(False)
@@ -1733,7 +1742,7 @@ def _pprint_styles(_styles):
                                for an, av
                                in args])
 
-        #adding ``quotes`` since - and | have special meaning in reST
+        # adding ``quotes`` since - and | have special meaning in reST
         _table.append([cls.__name__, "``%s``" % name, argstr])
 
     return _pprint_table(_table)
@@ -1975,8 +1984,7 @@ class BoxStyle(_Style):
             pad = mutation_size * self.pad
 
             # width and height with padding added.
-            width, height = width + 2. * pad, \
-                            height + 2. * pad,
+            width, height = width + 2. * pad, height + 2. * pad
 
             # boundary of the padded box
             x0, y0 = x0 - pad, y0 - pad,
@@ -2007,7 +2015,6 @@ class BoxStyle(_Style):
         """
 
         def __init__(self, pad=0.3):
-            #self.pad = pad
             super(BoxStyle.RArrow, self).__init__(pad)
 
         def transmute(self, x0, y0, width, height, mutation_size):
@@ -2100,8 +2107,7 @@ class BoxStyle(_Style):
             else:
                 dr = pad
 
-            width, height = width + 2. * pad, \
-                            height + 2. * pad,
+            width, height = width + 2. * pad, height + 2. * pad
 
             x0, y0 = x0 - pad, y0 - pad,
             x1, y1 = x0 + width, y0 + height
@@ -2165,8 +2171,8 @@ class BoxStyle(_Style):
             else:
                 dr = pad / 2.
 
-            width, height = width + 2. * pad - 2 * dr, \
-                            height + 2. * pad - 2 * dr,
+            width, height = (width + 2. * pad - 2 * dr,
+                             height + 2. * pad - 2 * dr)
 
             x0, y0 = x0 - pad + dr, y0 - pad + dr,
             x1, y1 = x0 + width, y0 + height
@@ -2220,8 +2226,8 @@ class BoxStyle(_Style):
                 tooth_size = self.tooth_size * mutation_size
 
             tooth_size2 = tooth_size / 2.
-            width, height = width + 2. * pad - tooth_size, \
-                            height + 2. * pad - tooth_size,
+            width, height = (width + 2. * pad - tooth_size,
+                            height + 2. * pad - tooth_size)
 
             # the sizes of the vertical and horizontal sawtooth are
             # separately adjusted to fit the given box size.
@@ -2283,11 +2289,11 @@ class BoxStyle(_Style):
                           in range(dsy_n * 2)] + \
                          [y0 + tooth_size2]
 
-            saw_vertices = list(zip(bottom_saw_x, bottom_saw_y)) + \
-                           list(zip(right_saw_x, right_saw_y)) + \
-                           list(zip(top_saw_x, top_saw_y)) + \
-                           list(zip(left_saw_x, left_saw_y)) + \
-                           [(bottom_saw_x[0], bottom_saw_y[0])]
+            saw_vertices = (list(zip(bottom_saw_x, bottom_saw_y)) +
+                            list(zip(right_saw_x, right_saw_y)) +
+                            list(zip(top_saw_x, top_saw_y)) +
+                            list(zip(left_saw_x, left_saw_y)) +
+                            [(bottom_saw_x[0], bottom_saw_y[0])])
 
             return saw_vertices
 
@@ -2320,8 +2326,8 @@ class BoxStyle(_Style):
             saw_vertices = np.concatenate([np.array(saw_vertices),
                                            [saw_vertices[0]]], axis=0)
             codes = ([Path.MOVETO] +
-                 [Path.CURVE3, Path.CURVE3] * ((len(saw_vertices)-1) // 2) +
-                 [Path.CLOSEPOLY])
+                     [Path.CURVE3, Path.CURVE3] * ((len(saw_vertices)-1)//2) +
+                     [Path.CLOSEPOLY])
             return Path(saw_vertices, codes)
 
     _style_list["roundtooth"] = Roundtooth
@@ -2750,10 +2756,10 @@ class ConnectionStyle(_Style):
             x1, y1 = posA
             x2, y2 = posB
 
-            cosA, sinA = math.cos(self.angleA / 180. * math.pi),\
-                         math.sin(self.angleA / 180. * math.pi),
-            cosB, sinB = math.cos(self.angleB / 180. * math.pi),\
-                         math.sin(self.angleB / 180. * math.pi),
+            cosA, sinA = (math.cos(self.angleA / 180. * math.pi),
+                          math.sin(self.angleA / 180. * math.pi))
+            cosB, sinB = (math.cos(self.angleB / 180. * math.pi),
+                          math.sin(self.angleB / 180. * math.pi))
 
             cx, cy = get_intersection(x1, y1, cosA, sinA,
                                       x2, y2, cosB, sinB)
@@ -2795,10 +2801,10 @@ class ConnectionStyle(_Style):
             x1, y1 = posA
             x2, y2 = posB
 
-            cosA, sinA = math.cos(self.angleA / 180. * math.pi),\
-                         math.sin(self.angleA / 180. * math.pi),
-            cosB, sinB = math.cos(self.angleB / 180. * math.pi),\
-                         math.sin(self.angleB / 180. * math.pi),
+            cosA, sinA = (math.cos(self.angleA / 180. * math.pi),
+                          math.sin(self.angleA / 180. * math.pi))
+            cosB, sinB = (math.cos(self.angleB / 180. * math.pi),
+                          math.sin(self.angleB / 180. * math.pi))
 
             cx, cy = get_intersection(x1, y1, cosA, sinA,
                                       x2, y2, cosB, sinB)
@@ -2873,7 +2879,7 @@ class ConnectionStyle(_Style):
             if self.armA:
                 cosA = math.cos(self.angleA / 180. * math.pi)
                 sinA = math.sin(self.angleA / 180. * math.pi)
-                #x_armA, y_armB
+                # x_armA, y_armB
                 d = self.armA - self.rad
                 rounded.append((x1 + d * cosA, y1 + d * sinA))
                 d = self.armA
@@ -3098,10 +3104,10 @@ class ArrowStyle(_Style):
             its control points if true.
             """
             segments = list(path.iter_segments())
-            assert len(segments) == 2
-
-            assert segments[0][1] == Path.MOVETO
-            assert segments[1][1] == Path.CURVE3
+            if ((len(segments) != 2) or (segments[0][1] != Path.MOVETO) or
+                    (segments[1][1] != Path.CURVE3)):
+                msg = "'path' it's not a valid quadratic bezier curve"
+                raise ValueError(msg)
 
             return list(segments[0][0]) + list(segments[1][0])
 
@@ -3112,7 +3118,7 @@ class ArrowStyle(_Style):
             the path object along which the arrow will be drawn, and
             the mutation_size, with which the amount arrow head and
             etc. will be scaled. The linewidth may be used to adjust
-            the the path so that it does not pass beyond the given
+            the path so that it does not pass beyond the given
             points. It returns a tuple of a Path instance and a
             boolean. The boolean value indicate whether the path can
             be filled or not. The return value can also be a list of paths
@@ -3182,8 +3188,7 @@ class ArrowStyle(_Style):
             fillend) is True.
             """
             self.beginarrow, self.endarrow = beginarrow, endarrow
-            self.head_length, self.head_width = \
-                    head_length, head_width
+            self.head_length, self.head_width = head_length, head_width
             self.fillbegin, self.fillend = fillbegin, fillend
             super(ArrowStyle._Curve, self).__init__()
 
@@ -3198,13 +3203,17 @@ class ArrowStyle(_Style):
             """
 
             # arrow from x0, y0 to x1, y1
-
             dx, dy = x0 - x1, y0 - y1
-            cp_distance = math.sqrt(dx ** 2 + dy ** 2)
+
+            cp_distance = np.hypot(dx, dy)
 
             # pad_projected : amount of pad to account the
             # overshooting of the projection of the wedge
             pad_projected = (.5 * linewidth / sin_t)
+
+            # Account for division by zero
+            if cp_distance == 0:
+                cp_distance = 1
 
             # apply pad for projected edge
             ddx = pad_projected * dx / cp_distance
@@ -3432,8 +3441,7 @@ class ArrowStyle(_Style):
                      widthA=1., widthB=1.,
                      lengthA=0.2, lengthB=0.2,
                      angleA=None, angleB=None,
-                     scaleA=None, scaleB=None
-                    ):
+                     scaleA=None, scaleB=None):
             self.bracketA, self.bracketB = bracketA, bracketB
             self.widthA, self.widthB = widthA, widthB
             self.lengthA, self.lengthB = lengthA, lengthB
@@ -3441,8 +3449,7 @@ class ArrowStyle(_Style):
             self.scaleA, self.scaleB = scaleA, scaleB
 
         def _get_bracket(self, x0, y0,
-                         cos_t, sin_t, width, length,
-                        ):
+                         cos_t, sin_t, width, length):
 
             # arrow from x0, y0 to x1, y1
             from matplotlib.bezier import get_normal_points
@@ -3558,7 +3565,9 @@ class ArrowStyle(_Style):
             """
 
             super(ArrowStyle.BracketA, self).__init__(True, None,
-                     widthA=widthA, lengthA=lengthA, angleA=angleA)
+                                                      widthA=widthA,
+                                                      lengthA=lengthA,
+                                                      angleA=angleA)
 
     _style_list["]-"] = BracketA
 
@@ -3580,7 +3589,9 @@ class ArrowStyle(_Style):
             """
 
             super(ArrowStyle.BracketB, self).__init__(None, True,
-                     widthB=widthB, lengthB=lengthB, angleB=angleB)
+                                                      widthB=widthB,
+                                                      lengthB=lengthB,
+                                                      angleB=angleB)
 
     _style_list["-["] = BracketB
 
@@ -3637,7 +3648,7 @@ class ArrowStyle(_Style):
             """
 
             self.head_length, self.head_width, self.tail_width = \
-                    head_length, head_width, tail_width
+                head_length, head_width, tail_width
             super(ArrowStyle.Simple, self).__init__()
 
         def transmute(self, path, mutation_size, linewidth):
@@ -3666,9 +3677,8 @@ class ArrowStyle(_Style):
 
             # head
             head_width = self.head_width * mutation_size
-            head_left, head_right = \
-                       make_wedged_bezier2(arrow_in, head_width / 2.,
-                                           wm=.5)
+            head_left, head_right = make_wedged_bezier2(arrow_in,
+                                                        head_width / 2., wm=.5)
 
             # tail
             if arrow_out is not None:
@@ -3676,7 +3686,6 @@ class ArrowStyle(_Style):
                 tail_left, tail_right = get_parallels(arrow_out,
                                                       tail_width / 2.)
 
-                #head_right, head_left = head_r, head_l
                 patch_path = [(Path.MOVETO, tail_right[0]),
                               (Path.CURVE3, tail_right[1]),
                               (Path.CURVE3, tail_right[2]),
@@ -3725,7 +3734,7 @@ class ArrowStyle(_Style):
             """
 
             self.head_length, self.head_width, self.tail_width = \
-                    head_length, head_width, tail_width
+                head_length, head_width, tail_width
             super(ArrowStyle.Fancy, self).__init__()
 
         def transmute(self, path, mutation_size, linewidth):
@@ -3758,11 +3767,11 @@ class ArrowStyle(_Style):
 
             # path for head
             in_f = inside_circle(x2, y2, head_length * .8)
-            path_out, path_in = \
-                       split_bezier_intersecting_with_closedpath(
+            path_out, path_in = split_bezier_intersecting_with_closedpath(
                                         arrow_path,
                                         in_f,
-                                        tolerence=0.01)
+                                        tolerence=0.01
+                                )
             path_tail = path_out
 
             # head
@@ -3779,11 +3788,11 @@ class ArrowStyle(_Style):
 
             # path for head
             in_f = inside_circle(x0, y0, tail_width * .3)
-            path_in, path_out = \
-                       split_bezier_intersecting_with_closedpath(
-                                arrow_path,
-                                in_f,
-                                tolerence=0.01)
+            path_in, path_out = split_bezier_intersecting_with_closedpath(
+                                    arrow_path,
+                                    in_f,
+                                    tolerence=0.01
+                                )
             tail_start = path_in[-1]
 
             head_right, head_left = head_r, head_l
@@ -3810,7 +3819,7 @@ class ArrowStyle(_Style):
 
     class Wedge(_Base):
         """
-        Wedge(?) shape. Only wokrs with a quadratic bezier curve.  The
+        Wedge(?) shape. Only works with a quadratic bezier curve.  The
         begin point has a width of the tail_width and the end point has a
         width of 0. At the middle, the width is shrink_factor*tail_width.
 

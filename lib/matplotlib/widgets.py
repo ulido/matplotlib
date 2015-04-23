@@ -68,6 +68,29 @@ class Widget(object):
     """
     drawon = True
     eventson = True
+    _active = True
+
+    def set_active(self, active):
+        """Set whether the widget is active.
+        """
+        self._active = active
+
+    def get_active(self):
+        """Get whether the widget is active.
+        """
+        return self._active
+
+    # set_active is overriden by SelectorWidgets.
+    active = property(get_active, lambda self, active: self.set_active(active),
+                      doc="Is the widget active?")
+                      
+    def ignore(self, event):
+        """Return True if event should be ignored.
+
+        This method (or a version of it) should be called at the beginning
+        of any event callback.
+        """
+        return not self.active
 
 
 class AxesWidget(Widget):
@@ -96,7 +119,6 @@ class AxesWidget(Widget):
         self.ax = ax
         self.canvas = ax.figure.canvas
         self.cids = []
-        self._active = True
 
     def connect_event(self, event, callback):
         """Connect callback with an event.
@@ -111,28 +133,6 @@ class AxesWidget(Widget):
         """Disconnect all events created by this widget."""
         for c in self.cids:
             self.canvas.mpl_disconnect(c)
-
-    def set_active(self, active):
-        """Set whether the widget is active.
-        """
-        self._active = active
-
-    def get_active(self):
-        """Get whether the widget is active.
-        """
-        return self._active
-
-    # set_active is overriden by SelectorWidgets.
-    active = property(get_active, lambda self, active: self.set_active(active),
-                      doc="Is the widget active?")
-
-    def ignore(self, event):
-        """Return True if event should be ignored.
-
-        This method (or a version of it) should be called at the beginning
-        of any event callback.
-        """
-        return not self.active
 
 
 class Button(AxesWidget):
@@ -569,16 +569,31 @@ class CheckButtons(AxesWidget):
         if event.inaxes != self.ax:
             return
 
-        for p, t, lines in zip(self.rectangles, self.labels, self.lines):
+        for i, (p, t) in enumerate(zip(self.rectangles, self.labels)):
             if (t.get_window_extent().contains(event.x, event.y) or
                     p.get_window_extent().contains(event.x, event.y)):
-                l1, l2 = lines
-                l1.set_visible(not l1.get_visible())
-                l2.set_visible(not l2.get_visible())
-                thist = t
+                self.set_active(i)
                 break
         else:
             return
+
+    def set_active(self, index):
+        """
+        Directly (de)activate a check button by index.
+
+        *index* is an index into the original label list
+            that this object was constructed with.
+            Raises ValueError if *index* is invalid.
+
+        Callbacks will be triggered if :attr:`eventson` is True.
+
+        """
+        if 0 > index >= len(self.labels):
+            raise ValueError("Invalid CheckButton index: %d" % index)
+
+        l1, l2 = self.lines[index]
+        l1.set_visible(not l1.get_visible())
+        l2.set_visible(not l2.get_visible())
 
         if self.drawon:
             self.ax.figure.canvas.draw()
@@ -586,7 +601,7 @@ class CheckButtons(AxesWidget):
         if not self.eventson:
             return
         for cid, func in six.iteritems(self.observers):
-            func(thist.get_text())
+            func(self.labels[index].get_text())
 
     def on_clicked(self, func):
         """
@@ -698,17 +713,31 @@ class RadioButtons(AxesWidget):
             pcirc = np.array([p.center[0], p.center[1]])
             return dist(pclicked, pcirc) < p.radius
 
-        for p, t in zip(self.circles, self.labels):
+        for i, (p, t) in enumerate(zip(self.circles, self.labels)):
             if t.get_window_extent().contains(event.x, event.y) or inside(p):
-                inp = p
-                thist = t
-                self.value_selected = t.get_text()
+                self.set_active(i)
                 break
         else:
             return
 
-        for p in self.circles:
-            if p == inp:
+    def set_active(self, index):
+        """
+        Trigger which radio button to make active.
+
+        *index* is an index into the original label list
+            that this object was constructed with.
+            Raise ValueError if the index is invalid.
+
+        Callbacks will be triggered if :attr:`eventson` is True.
+
+        """
+        if 0 > index >= len(self.labels):
+            raise ValueError("Invalid RadioButton index: %d" % index)
+
+        self.value_selected = self.labels[index].get_text()
+
+        for i, p in enumerate(self.circles):
+            if i == index:
                 color = self.activecolor
             else:
                 color = self.ax.get_axis_bgcolor()
@@ -720,7 +749,7 @@ class RadioButtons(AxesWidget):
         if not self.eventson:
             return
         for cid, func in six.iteritems(self.observers):
-            func(thist.get_text())
+            func(self.labels[index].get_text())
 
     def on_clicked(self, func):
         """
@@ -1061,6 +1090,8 @@ class MultiCursor(Widget):
 
     def clear(self, event):
         """clear the cursor"""
+        if self.ignore(event):
+            return        
         if self.useblit:
             self.background = (
                 self.canvas.copy_from_bbox(self.canvas.figure.bbox))
@@ -1068,6 +1099,8 @@ class MultiCursor(Widget):
             line.set_visible(False)
 
     def onmove(self, event):
+        if self.ignore(event):
+            return        
         if event.inaxes is None:
             return
         if not self.canvas.widgetlock.available(self):
@@ -1097,7 +1130,6 @@ class MultiCursor(Widget):
                     ax.draw_artist(line)
             self.canvas.blit(self.canvas.figure.bbox)
         else:
-
             self.canvas.draw_idle()
 
 
@@ -1306,7 +1338,9 @@ class SpanSelector(_SelectorWidget):
         if rectprops is None:
             rectprops = dict(facecolor='red', alpha=0.5)
 
-        assert direction in ['horizontal', 'vertical'], 'Must choose horizontal or vertical for direction'
+        if direction not in ['horizontal', 'vertical']:
+            msg = "direction must be in [ 'horizontal' | 'vertical' ]"
+            raise ValueError(msg)
         self.direction = direction
 
         self.rect = None
@@ -1558,7 +1592,9 @@ class RectangleSelector(_SelectorWidget):
         self.minspanx = minspanx
         self.minspany = minspany
 
-        assert(spancoords in ('data', 'pixels'))
+        if spancoords not in ('data', 'pixels'):
+            msg = "'spancoords' must be one of [ 'data' | 'pixels' ]"
+            raise ValueError(msg)
 
         self.spancoords = spancoords
         self.drawtype = drawtype

@@ -483,7 +483,7 @@ class Text(Artist):
 
     def get_bbox_patch(self):
         """
-        Return the bbox Patch object. Returns None if the the
+        Return the bbox Patch object. Returns None if the
         FancyBboxPatch is not made.
         """
         return self._bbox_patch
@@ -639,16 +639,18 @@ class Text(Artist):
 
             if self.get_path_effects():
                 from matplotlib.patheffects import PathEffectRenderer
-                renderer = PathEffectRenderer(self.get_path_effects(),
-                                              renderer)
+                textrenderer = PathEffectRenderer(self.get_path_effects(),
+                                                  renderer)
+            else:
+                textrenderer = renderer
 
             if self.get_usetex():
-                renderer.draw_tex(gc, x, y, clean_line,
-                                  self._fontproperties, angle, mtext=mtext)
+                textrenderer.draw_tex(gc, x, y, clean_line,
+                                      self._fontproperties, angle, mtext=mtext)
             else:
-                renderer.draw_text(gc, x, y, clean_line,
-                                   self._fontproperties, angle,
-                                   ismath=ismath, mtext=mtext)
+                textrenderer.draw_text(gc, x, y, clean_line,
+                                       self._fontproperties, angle,
+                                       ismath=ismath, mtext=mtext)
 
         gc.restore()
         renderer.close_group('text')
@@ -1474,7 +1476,8 @@ class OffsetFrom(object):
         self.set_unit(unit)
 
     def set_unit(self, unit):
-        assert unit in ["points", "pixels"]
+        if unit not in ["points", "pixels"]:
+            raise ValueError("'unit' must be one of [ 'points' | 'pixels' ]")
         self._unit = unit
 
     def get_unit(self):
@@ -1683,7 +1686,7 @@ class _AnnotationBase(object):
         return self._annotation_clip
 
     def _get_position_xy(self, renderer):
-        "Return the pixel position of the the annotated point."
+        "Return the pixel position of the annotated point."
         x, y = self.xy
         return self._get_xy(renderer, x, y, self.xycoords)
 

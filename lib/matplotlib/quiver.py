@@ -82,7 +82,7 @@ Keyword arguments:
     'x' or 'y', the arrows get larger as one zooms in; for other
     units, the arrow size is independent of the zoom state.  For
     'width or 'height', the arrow size increases with the width and
-    height of the axes, respectively, when the the window is resized;
+    height of the axes, respectively, when the window is resized;
     for 'dots' or 'inches', resizing does not change the arrows.
 
 
@@ -356,8 +356,8 @@ class QuiverKey(martist.Artist):
     def contains(self, mouseevent):
         # Maybe the dictionary should allow one to
         # distinguish between a text hit and a vector hit.
-        if (self.text.contains(mouseevent)[0]
-                or self.vector.contains(mouseevent)[0]):
+        if (self.text.contains(mouseevent)[0] or
+                self.vector.contains(mouseevent)[0]):
             return True, {}
         return False, {}
 
@@ -452,9 +452,9 @@ class Quiver(mcollections.PolyCollection):
         kw.setdefault('facecolors', self.color)
         kw.setdefault('linewidths', (0,))
         mcollections.PolyCollection.__init__(self, [], offsets=self.XY,
-                                            transOffset=self.transform,
-                                            closed=False,
-                                            **kw)
+                                             transOffset=self.transform,
+                                             closed=False,
+                                             **kw)
         self.polykw = kw
         self.set_UVC(U, V, C)
         self._initialized = False
@@ -529,11 +529,13 @@ class Quiver(mcollections.PolyCollection):
         mcollections.PolyCollection.draw(self, renderer)
 
     def set_UVC(self, U, V, C=None):
-        U = ma.masked_invalid(U, copy=False).ravel()
-        V = ma.masked_invalid(V, copy=False).ravel()
+        # We need to ensure we have a copy, not a reference
+        # to an array that might change before draw().
+        U = ma.masked_invalid(U, copy=True).ravel()
+        V = ma.masked_invalid(V, copy=True).ravel()
         mask = ma.mask_or(U.mask, V.mask, copy=False, shrink=True)
         if C is not None:
-            C = ma.masked_invalid(C, copy=False).ravel()
+            C = ma.masked_invalid(C, copy=True).ravel()
             mask = ma.mask_or(mask, C.mask, copy=False, shrink=True)
             if mask is ma.nomask:
                 C = C.filled()
@@ -622,9 +624,9 @@ class Quiver(mcollections.PolyCollection):
                 amean = a[~self.Umask].mean()
             else:
                 amean = a.mean()
-            scale = 1.8 * amean * sn / self.span  # crude auto-scaling
-                # scale is typical arrow length as a multiple
-                # of the arrow width
+            # crude auto-scaling
+            # scale is typical arrow length as a multiple of the arrow width
+            scale = 1.8 * amean * sn / self.span
         if self.scale_units is None:
             if self.scale is None:
                 self.scale = scale

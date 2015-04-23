@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import matplotlib.markers as mmarkers
 from numpy.testing import assert_array_equal
 import warnings
+from matplotlib.cbook import IgnoredKeywordWarning
 
 
 @image_comparison(baseline_images=['formatter_ticker_001',
@@ -127,6 +128,16 @@ def test_twinx_cla():
     assert_true(ax.xaxis.get_visible())
     assert_true(ax.patch.get_visible())
     assert_true(ax.yaxis.get_visible())
+
+
+@image_comparison(baseline_images=["minorticks_on_rcParams_both"], extensions=['png'])
+def test_minorticks_on_rcParams_both():
+    fig = plt.figure()
+    matplotlib.rcParams['xtick.minor.visible'] = True
+    matplotlib.rcParams['ytick.minor.visible'] = True
+
+    plt.plot([0, 1], [0, 1])
+    plt.axis([0, 1, 0, 1])
 
 
 @image_comparison(baseline_images=["autoscale_tiny_range"], remove_text=True)
@@ -484,6 +495,12 @@ def test_hexbin_extent():
 
     ax.hexbin(x, y, extent=[.1, .3, .6, .7])
 
+@image_comparison(baseline_images=['hexbin_empty'], remove_text=True,
+	extensions=['png'])
+def test_hexbin_empty():
+    # From #3886: creating hexbin from empty dataset raises ValueError
+    ax = plt.gca()
+    ax.hexbin([], [])
 
 @cleanup
 def test_hexbin_pickable():
@@ -994,6 +1011,32 @@ def test_marker_edges():
     ax.plot(x+0.2, np.sin(x), 'y.', ms=30.0, mew=2, mec='b')
 
 
+@image_comparison(baseline_images=['bar_tick_label_single'],
+                  extensions=['png'])
+def test_bar_tick_label_single():
+    # From 2516: plot bar with array of string labels for x axis
+    ax = plt.gca()
+    ax.bar(0, 1 , tick_label='a')
+
+
+@image_comparison(baseline_images=['bar_tick_label_multiple'],
+                  extensions=['png'])
+def test_bar_tick_label_multiple():
+    # From 2516: plot bar with array of string labels for x axis
+    ax = plt.gca()
+    ax.bar([1, 2.5], [1, 2], width=[0.2, 0.5], tick_label=['a', 'b'],
+           align='center')
+
+
+@image_comparison(baseline_images=['barh_tick_label'],
+                  extensions=['png'])
+def test_barh_tick_label():
+    # From 2516: plot barh with array of string labels for y axis
+    ax = plt.gca()
+    ax.barh([1, 2.5], [1, 2], height=[0.2, 0.5], tick_label=['a', 'b'],
+            align='center')
+
+
 @image_comparison(baseline_images=['hist_log'],
                   remove_text=True)
 def test_hist_log():
@@ -1003,6 +1046,19 @@ def test_hist_log():
     ax = fig.add_subplot(111)
     ax.hist(data, fill=False, log=True)
 
+@image_comparison(baseline_images=['hist_bar_empty'], remove_text=True,
+	extensions=['png'])
+def test_hist_bar_empty():
+    # From #3886: creating hist from empty dataset raises ValueError
+    ax = plt.gca()
+    ax.hist([], histtype='bar')
+
+@image_comparison(baseline_images=['hist_step_empty'], remove_text=True,
+	extensions=['png'])
+def test_hist_step_empty():
+    # From #3886: creating hist from empty dataset raises ValueError
+    ax = plt.gca()
+    ax.hist([], histtype='step')
 
 @image_comparison(baseline_images=['hist_steplog'], remove_text=True)
 def test_hist_steplog():
@@ -1081,7 +1137,7 @@ def test_hist2d():
 @image_comparison(baseline_images=['hist2d_transpose'])
 def test_hist2d_transpose():
     np.random.seed(0)
-    # make sure the the output from np.histogram is transposed before
+    # make sure the output from np.histogram is transposed before
     # passing to pcolorfast
     x = np.array([5]*100)
     y = np.random.randn(100)-2
@@ -2260,6 +2316,37 @@ def test_eventplot_defaults():
     fig = plt.figure()
     axobj = fig.add_subplot(111)
     colls = axobj.eventplot(data)
+
+
+@image_comparison(baseline_images=['test_eventplot_problem_kwargs'], extensions=['png'], remove_text=True)
+def test_eventplot_problem_kwargs():
+    '''
+    test that 'singular' versions of LineCollection props raise an
+    IgnoredKeywordWarning rather than overriding the 'plural' versions (e.g.
+    to prevent 'color' from overriding 'colors', see issue #4297)
+    '''
+    np.random.seed(0)
+
+    data1 = np.random.random([20]).tolist()
+    data2 = np.random.random([10]).tolist()
+    data = [data1, data2]
+
+    fig = plt.figure()
+    axobj = fig.add_subplot(111)
+
+    with warnings.catch_warnings(record=True) as w:
+        colls = axobj.eventplot(data,
+                                colors=['r', 'b'],
+                                color=['c', 'm'],
+                                linewidths=[2, 1],
+                                linewidth=[1, 2],
+                                linestyles=['solid', 'dashed'],
+                                linestyle=['dashdot', 'dotted'])
+
+        # check that three IgnoredKeywordWarnings were raised
+        assert_equal(len(w), 3)
+        assert_true(all(issubclass(wi.category, IgnoredKeywordWarning)
+                    for wi in w))
 
 
 @cleanup
@@ -3492,10 +3579,10 @@ def test_set_get_ticklabels():
     # set ticklabel to 1 plot in normal way
     ax[0].set_xticklabels(('a', 'b', 'c', 'd'))
     ax[0].set_yticklabels(('11', '12', '13', '14'))
-   
+
     # set ticklabel to the other plot, expect the 2 plots have same label setting
-    # pass get_ticklabels return value as ticklabels argument    
-    ax[1].set_xticklabels(ax[0].get_xticklabels() ) 
+    # pass get_ticklabels return value as ticklabels argument
+    ax[1].set_xticklabels(ax[0].get_xticklabels() )
     ax[1].set_yticklabels(ax[0].get_yticklabels() )
 
 
@@ -3539,17 +3626,28 @@ def test_pathological_hexbin():
         fig.savefig(out)
         assert_equal(len(w), 0)
 
+
 @cleanup
 def test_color_None():
     # issue 3855
     fig, ax = plt.subplots()
     ax.plot([1,2], [1,2], color=None)
 
+
+@cleanup
+def test_color_alias():
+    # issues 4157 and 4162
+    fig, ax = plt.subplots()
+    line = ax.plot([0, 1], c='lime')[0]
+    assert_equal('lime', line.get_color())
+
+
 @cleanup
 def test_numerical_hist_label():
     fig, ax = plt.subplots()
     ax.hist([range(15)] * 5, label=range(5))
-    
+
+
 @cleanup
 def test_move_offsetlabel():
     data = np.random.random(10) * 1e-22
@@ -3557,6 +3655,36 @@ def test_move_offsetlabel():
     ax.plot(data)
     ax.yaxis.tick_right()
     assert_equal((1, 0.5), ax.yaxis.offsetText.get_position())
+
+
+@cleanup
+def test_bar_negative_width():
+    fig, ax = plt.subplots()
+    res = ax.bar(range(1, 5), range(1, 5), width=-1)
+    assert_equal(len(res), 4)
+    for indx, b in enumerate(res):
+        assert_equal(b._x, indx)
+        assert_equal(b._width, 1)
+        assert_equal(b._height, indx + 1)
+
+
+@cleanup
+def test_no_None():
+    fig, ax = plt.subplots()
+    assert_raises(ValueError, plt.plot, None)
+    assert_raises(ValueError, plt.plot, None, None)
+
+
+@cleanup
+def test_pcolor_fast_non_uniform():
+    Z = np.arange(6).reshape((3, 2))
+    X = np.array([0, 1, 2, 10])
+    Y = np.array([0, 1, 2])
+
+    plt.figure()
+    ax = plt.subplot(111)
+    ax.pcolorfast(X, Y, Z.T)
+
 
 if __name__ == '__main__':
     import nose

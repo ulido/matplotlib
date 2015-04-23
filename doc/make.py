@@ -40,7 +40,7 @@ def html(buildername='html'):
     check_build()
     copy_if_out_of_date('../lib/matplotlib/mpl-data/matplotlibrc', '_static/matplotlibrc')
     if small_docs:
-        options = "-D plot_formats=\"[('png', 80)]\""
+        options = "-D plot_formats=png:80"
     else:
         options = ''
     if warnings_as_errors:
@@ -161,20 +161,21 @@ for link, target in required_symlinks:
         with open(link, 'r') as content:
             delete = target == content.read()
         if delete:
-            symlink_warnings.append('deleted:  doc/{}'.format(link))
+            symlink_warnings.append('deleted:  doc/{0}'.format(link))
             os.unlink(link)
         else:
-            raise RuntimeError("doc/{} should be a directory or symlink -- it isn't")
+            raise RuntimeError("doc/{0} should be a directory or symlink -- it"
+                               " isn't")
     if not os.path.exists(link):
         if hasattr(os, 'symlink'):
             os.symlink(target, link)
         else:
-            symlink_warnings.append('files copied to {}'.format(link))
+            symlink_warnings.append('files copied to {0}'.format(link))
             shutil.copytree(os.path.join(link, '..', target), link)
 
 if sys.platform == 'win32' and len(symlink_warnings) > 0:
-    print('The following items related to symlinks will show up '+ 
-            'as spurious changes in your \'git status\':\n\t{}' 
+    print('The following items related to symlinks will show up '
+          'as spurious changes in your \'git status\':\n\t{0}'
                     .format('\n\t'.join(symlink_warnings)))
 
 parser = argparse.ArgumentParser(description='Build matplotlib docs')

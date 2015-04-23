@@ -772,7 +772,15 @@ def _spectral_helper(x, y=None, NFFT=None, Fs=None, detrend_func=None,
         # Also include scaling factors for one-sided densities and dividing by
         # the sampling frequency, if desired. Scale everything, except the DC
         # component and the NFFT/2 component:
-        result[1:-1] *= scaling_factor
+
+        # if we have a even number of frequencies, don't scale NFFT/2
+        if not NFFT % 2:
+            slc = slice(1, -1, None)
+        # if we have an odd number, just don't scale DC
+        else:
+            slc = slice(1, None, None)
+
+        result[slc] *= scaling_factor
 
         # MATLAB divides by the sampling frequency so that density function
         # has units of dB/Hz and can be integrated by the plotted frequency
@@ -1485,7 +1493,8 @@ def cohere_pairs(X, ij, NFFT=256, Fs=2, detrend=detrend_none,
     # of every channel.  If preferSpeedOverMemory, cache the conjugate
     # as well
     if cbook.iterable(window):
-        assert(len(window) == NFFT)
+        if len(window) != NFFT:
+            raise ValueError("The length of the window must be equal to NFFT")
         windowVals = window
     else:
         windowVals = window(np.ones(NFFT, X.dtype))
@@ -2431,7 +2440,7 @@ def rec_groupby(r, groupby, stats):
       stats = ( ('sales', len, 'numsales'), ('sales', np.mean, 'avgsale') )
 
     Return record array has *dtype* names for each attribute name in
-    the the *groupby* argument, with the associated group values, and
+    the *groupby* argument, with the associated group values, and
     for each outname name in the *stats* argument, with the associated
     stat summary output.
     """
@@ -2468,7 +2477,7 @@ def rec_summarize(r, summaryfuncs):
     *r* is a numpy record array
 
     *summaryfuncs* is a list of (*attr*, *func*, *outname*) tuples
-    which will apply *func* to the the array *r*[attr] and assign the
+    which will apply *func* to the array *r*[attr] and assign the
     output to a new attribute name *outname*.  The returned record
     array is identical to *r*, with extra arrays for each element in
     *summaryfuncs*.
@@ -2552,7 +2561,7 @@ def rec_join(key, r1, r2, jointype='inner', defaults=None, r1postfix='1',
 
         dt2 = r2.dtype[name]
         if dt1 != dt2:
-            msg = "The '{}' fields in arrays 'r1' and 'r2' must have the same"
+            msg = "The '{0}' fields in arrays 'r1' and 'r2' must have the same"
             msg += " dtype."
             raise ValueError(msg.format(name))
         if dt1.num > dt2.num:
@@ -3577,7 +3586,8 @@ def stineman_interp(xi, x, y, yp=None):
     # Cast key variables as float.
     x = np.asarray(x, np.float_)
     y = np.asarray(y, np.float_)
-    assert x.shape == y.shape
+    if x.shape != y.shape:
+        raise ValueError("'x' and 'y' must be of same shape")
 
     if yp is None:
         yp = slopes(x, y)
@@ -3824,7 +3834,8 @@ def poly_below(xmin, xs, ys):
     ys = numpy.asarray(ys)
     Nx = len(xs)
     Ny = len(ys)
-    assert(Nx == Ny)
+    if Nx != Ny:
+        raise ValueError("'xs' and 'ys' must have the same length")
     x = xmin*numpy.ones(2*Nx)
     y = numpy.ones(2*Nx)
     x[:Nx] = xs
@@ -3874,23 +3885,26 @@ def contiguous_regions(mask):
     """
     return a list of (ind0, ind1) such that mask[ind0:ind1].all() is
     True and we cover all such regions
-
-    TODO: this is a pure python implementation which probably has a much
-    faster numpy impl
     """
+    mask = np.asarray(mask, dtype=bool)
 
-    in_region = None
-    boundaries = []
-    for i, val in enumerate(mask):
-        if in_region is None and val:
-            in_region = i
-        elif in_region is not None and not val:
-            boundaries.append((in_region, i))
-            in_region = None
+    if not mask.size:
+        return []
 
-    if in_region is not None:
-        boundaries.append((in_region, i+1))
-    return boundaries
+    # Find the indices of region changes, and correct offset
+    idx, = np.nonzero(mask[:-1] != mask[1:])
+    idx += 1
+
+    # List operations are faster for moderately sized arrays
+    idx = idx.tolist()
+
+    # Add first and/or last index if needed
+    if mask[0]:
+        idx = [0] + idx
+    if mask[-1]:
+        idx.append(len(mask))
+
+    return list(zip(idx[::2], idx[1::2]))
 
 
 def cross_from_below(x, threshold):
@@ -4004,6 +4018,8 @@ def quad2cubic(q0x, q0y, q1x, q1y, q2x, q2y):
     points of a quadratic curve, and the output is a tuple of *x* and
     *y* coordinates of the four control points of the cubic curve.
     """
+    # TODO: Candidate for deprecation -- no longer used internally
+
     # c0x, c0y = q0x, q0y
     c1x, c1y = q0x + 2./3. * (q1x - q0x), q0y + 2./3. * (q1y - q0y)
     c2x, c2y = c1x + 1./3. * (q2x - q0x), c1y + 1./3. * (q2y - q0y)

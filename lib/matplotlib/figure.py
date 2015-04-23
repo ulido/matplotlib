@@ -576,6 +576,7 @@ class Figure(Artist):
                  vmin=None,
                  vmax=None,
                  origin=None,
+                 resize=False,
                  **kwargs):
         """
         Adds a non-resampled image to the figure.
@@ -603,6 +604,8 @@ class Figure(Artist):
           =========   =========================================================
           Keyword     Description
           =========   =========================================================
+          resize      a boolean, True or False. If "True", then re-size the
+                      Figure to match the given image size.
           xo or yo    An integer, the *x* and *y* image offset in pixels
           cmap        a :class:`matplotlib.colors.Colormap` instance, e.g.,
                       cm.jet. If *None*, default to the rc ``image.cmap``
@@ -636,6 +639,11 @@ class Figure(Artist):
 
         if not self._hold:
             self.clf()
+
+        if resize:
+            dpi = self.get_dpi()
+            figsize = [x / float(dpi) for x in (X.shape[1], X.shape[0])]
+            self.set_size_inches(figsize, forward=True)
 
         im = FigureImage(self, cmap, norm, xo, yo, origin, **kwargs)
         im.set_array(X)
@@ -872,7 +880,9 @@ class Figure(Artist):
 
         if isinstance(args[0], Axes):
             a = args[0]
-            assert(a.get_figure() is self)
+            if a.get_figure() is not self:
+                msg = "The Axes must have been created in the present figure"
+                raise ValueError(msg)
         else:
             rect = args[0]
             projection_class, kwargs, key = process_projection_requirements(
@@ -946,7 +956,10 @@ class Figure(Artist):
         if isinstance(args[0], SubplotBase):
 
             a = args[0]
-            assert(a.get_figure() is self)
+            if a.get_figure() is not self:
+                msg = ("The Subplot must have been created in the present"
+                       " figure")
+                raise ValueError(msg)
             # make a key for the subplot (which includes the axes object id
             # in the hash)
             key = self._make_key(*args, **kwargs)
@@ -1104,7 +1117,10 @@ class Figure(Artist):
         draw :class:`matplotlib.artist.Artist` instance *a* only --
         this is available only after the figure is drawn
         """
-        assert self._cachedRenderer is not None
+        if self._cachedRenderer is None:
+            msg = ('draw_artist can only be used after an initial draw which'
+                   ' caches the render')
+            raise AttributeError(msg)
         a.draw(self._cachedRenderer)
 
     def get_axes(self):
@@ -1416,9 +1432,10 @@ class Figure(Artist):
 
         Keyword arguments:
 
-          *dpi*: [ *None* | ``scalar > 0`` ]
+          *dpi*: [ *None* | ``scalar > 0`` | 'figure']
             The resolution in dots per inch.  If *None* it will default to
-            the value ``savefig.dpi`` in the matplotlibrc file.
+            the value ``savefig.dpi`` in the matplotlibrc file. If 'figure'
+            it will set the dpi to be the value of the figure.
 
           *facecolor*, *edgecolor*:
             the colors of the figure rectangle
@@ -1465,6 +1482,8 @@ class Figure(Artist):
         """
 
         kwargs.setdefault('dpi', rcParams['savefig.dpi'])
+        if kwargs['dpi'] == 'figure':
+            kwargs['dpi'] = self.get_dpi()
         frameon = kwargs.pop('frameon', rcParams['savefig.frameon'])
         transparent = kwargs.pop('transparent',
                                  rcParams['savefig.transparent'])

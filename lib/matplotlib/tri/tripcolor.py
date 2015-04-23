@@ -66,7 +66,7 @@ def tripcolor(ax, *args, **kwargs):
 
     if shading not in ['flat', 'gouraud']:
         raise ValueError("shading must be one of ['flat', 'gouraud'] "
-                         "not {}".format(shading))
+                         "not {0}".format(shading))
 
     tri, args, kwargs = Triangulation.get_from_args_and_kwargs(*args, **kwargs)
 
@@ -138,7 +138,9 @@ def tripcolor(ax, *args, **kwargs):
     collection.set_alpha(alpha)
     collection.set_array(C)
     if norm is not None:
-        assert(isinstance(norm, Normalize))
+        if not isinstance(norm, Normalize):
+            msg = "'norm' must be an instance of 'Normalize'"
+            raise ValueError(msg)
     collection.set_cmap(cmap)
     collection.set_norm(norm)
     if vmin is not None or vmax is not None:

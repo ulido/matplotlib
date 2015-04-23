@@ -460,7 +460,8 @@ def gcf():
     else:
         return figure()
 
-fignum_exists = _pylab_helpers.Gcf.has_fignum
+def fignum_exists(num):
+    return _pylab_helpers.Gcf.has_fignum(num) or num in get_figlabels()
 
 
 def get_fignums():

@@ -112,9 +112,6 @@ class PolarAffine(Affine2DBase):
         return self._mtx
     get_matrix.__doc__ = Affine2DBase.get_matrix.__doc__
 
-    def __getstate__(self):
-        return {}
-
 
 class InvertedPolarTransform(Transform):
     """
@@ -340,7 +337,9 @@ cbook.simple_linear_interpolation on the data before passing to matplotlib.""")
             )
 
     def get_xaxis_transform(self,which='grid'):
-        assert which in ['tick1','tick2','grid']
+        if which not in ['tick1','tick2','grid']:
+            msg = "'which' must be one of [ 'tick1' | 'tick2' | 'grid' ]"
+            raise ValueError(msg)
         return self._xaxis_transform
 
     def get_xaxis_text1_transform(self, pad):
@@ -350,7 +349,9 @@ cbook.simple_linear_interpolation on the data before passing to matplotlib.""")
         return self._xaxis_text2_transform, 'center', 'center'
 
     def get_yaxis_transform(self,which='grid'):
-        assert which in ['tick1','tick2','grid']
+        if which not in ['tick1','tick2','grid']:
+            msg = "'which' must be on of [ 'tick1' | 'tick2' | 'grid' ]"
+            raise ValueError(msg)
         return self._yaxis_transform
 
     def get_yaxis_text1_transform(self, pad):

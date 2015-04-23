@@ -296,7 +296,8 @@ class FigureCanvasWebAggCore(backend_agg.FigureCanvasAgg):
             # The right mouse button pops up a context menu, which
             # doesn't work very well, so use the middle mouse button
             # instead.  It doesn't seem that it's possible to disable
-            # the context menu in recent versions of Chrome.
+            # the context menu in recent versions of Chrome.  If this
+            # is resolved, please also adjust the docstring in MouseEvent.
             if button == 2:
                 button = 3
 
@@ -329,10 +330,10 @@ class FigureCanvasWebAggCore(backend_agg.FigureCanvasAgg):
             self._force_full = True
             self.draw_idle()
         else:
-            handler = getattr(self, 'handle_{}'.format(e_type), None)
+            handler = getattr(self, 'handle_{0}'.format(e_type), None)
             if handler is None:
                 import warnings
-                warnings.warn('Unhandled message type {}. {}'.format(
+                warnings.warn('Unhandled message type {0}. {1}'.format(
                                                         e_type, event))
             else:
                 return handler(event)

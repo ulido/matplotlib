@@ -117,6 +117,15 @@ def validate_float_or_None(s):
     except ValueError:
         raise ValueError('Could not convert "%s" to float' % s)
 
+def validate_dpi(s):
+    """confirm s is string 'figure' or convert s to float or raise"""
+    if s == 'figure':
+        return s
+    try:
+        return float(s)
+    except ValueError:
+        raise ValueError('"%s" is not string "figure" or'
+            ' could not convert "%s" to float' % (s, s))
 
 def validate_int(s):
     """convert s to int or raise"""
@@ -168,7 +177,7 @@ validate_qt5 = ValidateInStrings('backend.qt5', ['PyQt5'])
 def validate_toolbar(s):
     validator = ValidateInStrings(
                 'toolbar',
-                ['None', 'toolbar2'],
+                ['None', 'toolbar2', 'toolmanager'],
                 ignorecase=True)
     return validator(s)
 
@@ -235,18 +244,26 @@ class validate_nseq_int(object):
             raise ValueError('Could not convert all entries to ints')
 
 
+def validate_color_or_inherit(s):
+    'return a valid color arg'
+    if s == 'inherit':
+        return s
+    return validate_color(s)
+
+
 def validate_color(s):
     'return a valid color arg'
-    if s in (None, 'none', 'None'):
-        return None
-
+    try:
+        if s.lower() == 'none':
+            return 'None'
+    except AttributeError:
+        pass
     if is_color_like(s):
         return s
-
     stmp = '#' + s
+
     if is_color_like(stmp):
         return stmp
-
     # If it is still valid, it must be a tuple.
     colorarg = s
     msg = ''
@@ -272,19 +289,21 @@ def validate_colorlist(s):
     'return a list of colorspecs'
     if isinstance(s, six.string_types):
         return [validate_color(c.strip()) for c in s.split(',')]
-    else:
-        assert type(s) in [list, tuple]
+    elif type(s) in (list, tuple):
         return [validate_color(c) for c in s]
-
+    else:
+        msg = "'s' must be of type [ string | list | tuple ]"
+        raise ValueError(msg)
 
 def validate_stringlist(s):
     'return a list'
     if isinstance(s, six.string_types):
         return [six.text_type(v.strip()) for v in s.split(',') if v.strip()]
-    else:
-        assert type(s) in [list, tuple]
+    elif type(s) in (list, tuple):
         return [six.text_type(v) for v in s if v]
-
+    else:
+        msg = "'s' must be of type [ string | list | tuple ]"
+        raise ValueError(msg)
 
 validate_orientation = ValidateInStrings(
     'orientation', ['landscape', 'portrait'])
@@ -595,6 +614,9 @@ defaultParams = {
     'image.lut':           [256, validate_int],  # lookup table
     'image.origin':        ['upper', six.text_type],  # lookup table
     'image.resample':      [False, validate_bool],
+    # Specify whether vector graphics backends will combine all images on a
+    # set of axes into a single composite image
+    'image.composite_image': [True, validate_bool],
 
     # contour props
     'contour.negative_linestyle': ['dashed',
@@ -682,9 +704,8 @@ defaultParams = {
     # the relative size of legend markers vs. original
     'legend.markerscale': [1.0, validate_float],
     'legend.shadow': [False, validate_bool],
-    'legend.facecolor': [None, validate_color], # background color; white
-    'legend.edgecolor': [None, validate_color], # edge color; black
-
+    'legend.facecolor': ['inherit', validate_color_or_inherit],
+    'legend.edgecolor': ['inherit', validate_color_or_inherit],
 
     ## tick properties
     'xtick.major.size':  [4, validate_float],    # major xtick size in points
@@ -694,6 +715,8 @@ defaultParams = {
     'xtick.major.pad':   [4, validate_float],    # distance to label in points
     'xtick.minor.pad':   [4, validate_float],    # distance to label in points
     'xtick.color':       ['k', validate_color],  # color of the xtick labels
+    'xtick.minor.visible':   [False, validate_bool],    # visiablility of the x axis minor ticks
+    
     # fontsize of the xtick labels
     'xtick.labelsize':   ['medium', validate_fontsize],
     'xtick.direction':   ['in', six.text_type],            # direction of xticks
@@ -705,6 +728,8 @@ defaultParams = {
     'ytick.major.pad':   [4, validate_float],     # distance to label in points
     'ytick.minor.pad':   [4, validate_float],     # distance to label in points
     'ytick.color':       ['k', validate_color],   # color of the ytick labels
+    'ytick.minor.visible':   [False, validate_bool],    # visiablility of the y axis minor ticks
+
     # fontsize of the ytick labels
     'ytick.labelsize':   ['medium', validate_fontsize],
     'ytick.direction':   ['in', six.text_type],            # direction of yticks
@@ -743,7 +768,7 @@ defaultParams = {
                                                      closedmax=False)],
 
     ## Saving figure's properties
-    'savefig.dpi':         [100, validate_float],   # DPI
+    'savefig.dpi':         [100, validate_dpi],   # DPI
     'savefig.facecolor':   ['w', validate_color],  # facecolor; white
     'savefig.edgecolor':   ['w', validate_color],  # edgecolor; white
     'savefig.frameon':     [True, validate_bool],
@@ -764,6 +789,7 @@ defaultParams = {
     # Maintain shell focus for TkAgg
     'tk.window_focus':  [False, validate_bool],
     'tk.pythoninspect': [False, validate_tkpythoninspect],  # obsolete
+
     # Set the papersize/type
     'ps.papersize':     ['letter', validate_ps_papersize],
     'ps.useafm':        [False, validate_bool],  # Set PYTHONINSPECT

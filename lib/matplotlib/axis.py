@@ -1581,8 +1581,8 @@ class Axis(artist.Artist):
 
     def _update_label_position(self, bboxes, bboxes2):
         """
-        Update the label position based on the sequence of bounding
-        boxes of all the ticklabels
+        Update the label position based on the bounding box enclosing
+        all the ticklabels and axis spine
         """
         raise NotImplementedError('Derived must override')
 
@@ -1728,37 +1728,49 @@ class XAxis(Axis):
 
         ACCEPTS: [ 'top' | 'bottom' ]
         """
-        assert position == 'top' or position == 'bottom'
         if position == 'top':
             self.label.set_verticalalignment('baseline')
-        else:
+        elif position == 'bottom':
             self.label.set_verticalalignment('top')
+        else:
+            msg = "Position accepts only [ 'top' | 'bottom' ]"
+            raise ValueError(msg)
         self.label_position = position
 
     def _update_label_position(self, bboxes, bboxes2):
         """
-        Update the label position based on the sequence of bounding
-        boxes of all the ticklabels
+        Update the label position based on the bounding box enclosing
+        all the ticklabels and axis spine
         """
         if not self._autolabelpos:
             return
         x, y = self.label.get_position()
         if self.label_position == 'bottom':
-            if not len(bboxes):
-                bottom = self.axes.bbox.ymin
-            else:
-                bbox = mtransforms.Bbox.union(bboxes)
-                bottom = bbox.y0
+            try:
+                spine = self.axes.spines['bottom']
+                spinebbox = spine.get_transform().transform_path(
+                    spine.get_path()).get_extents()
+            except KeyError:
+                # use axes if spine doesn't exist
+                spinebbox = self.axes.bbox
+            bbox = mtransforms.Bbox.union(bboxes + [spinebbox])
+            bottom = bbox.y0
+
             self.label.set_position(
                 (x, bottom - self.labelpad * self.figure.dpi / 72.0)
             )
 
         else:
-            if not len(bboxes2):
-                top = self.axes.bbox.ymax
-            else:
-                bbox = mtransforms.Bbox.union(bboxes2)
-                top = bbox.y1
+            try:
+                spine = self.axes.spines['top']
+                spinebbox = spine.get_transform().transform_path(
+                    spine.get_path()).get_extents()
+            except KeyError:
+                # use axes if spine doesn't exist
+                spinebbox = self.axes.bbox
+            bbox = mtransforms.Bbox.union(bboxes2 + [spinebbox])
+            top = bbox.y1
+
             self.label.set_position(
                 (x, top + self.labelpad * self.figure.dpi / 72.0)
             )
@@ -2032,40 +2044,50 @@ class YAxis(Axis):
 
         ACCEPTS: [ 'left' | 'right' ]
         """
-        assert position == 'left' or position == 'right'
         self.label.set_rotation_mode('anchor')
         self.label.set_horizontalalignment('center')
         if position == 'left':
             self.label.set_verticalalignment('bottom')
-        else:
+        elif position == 'right':
             self.label.set_verticalalignment('top')
+        else:
+            msg = "Position accepts only [ 'left' | 'right' ]"
+            raise ValueError(msg)
         self.label_position = position
 
     def _update_label_position(self, bboxes, bboxes2):
         """
-        Update the label position based on the sequence of bounding
-        boxes of all the ticklabels
+        Update the label position based on the bounding box enclosing
+        all the ticklabels and axis spine
         """
         if not self._autolabelpos:
             return
         x, y = self.label.get_position()
         if self.label_position == 'left':
-            if not len(bboxes):
-                left = self.axes.bbox.xmin
-            else:
-                bbox = mtransforms.Bbox.union(bboxes)
-                left = bbox.x0
+            try:
+                spine = self.axes.spines['left']
+                spinebbox = spine.get_transform().transform_path(
+                    spine.get_path()).get_extents()
+            except KeyError:
+                # use axes if spine doesn't exist
+                spinebbox = self.axes.bbox
+            bbox = mtransforms.Bbox.union(bboxes + [spinebbox])
+            left = bbox.x0
 
             self.label.set_position(
                 (left - self.labelpad * self.figure.dpi / 72.0, y)
             )
 
         else:
-            if not len(bboxes2):
-                right = self.axes.bbox.xmax
-            else:
-                bbox = mtransforms.Bbox.union(bboxes2)
-                right = bbox.x1
+            try:
+                spine = self.axes.spines['right']
+                spinebbox = spine.get_transform().transform_path(
+                    spine.get_path()).get_extents()
+            except KeyError:
+                # use axes if spine doesn't exist
+                spinebbox = self.axes.bbox
+            bbox = mtransforms.Bbox.union(bboxes2 + [spinebbox])
+            right = bbox.x1
 
             self.label.set_position(
                 (right + self.labelpad * self.figure.dpi / 72.0, y)
@@ -2083,13 +2105,14 @@ class YAxis(Axis):
         )
 
     def set_offset_position(self, position):
-        assert position == 'left' or position == 'right'
-
         x, y = self.offsetText.get_position()
         if position == 'left':
             x = 0
-        else:
+        elif position == 'right':
             x = 1
+        else:
+            msg = "Position accepts only [ 'left' | 'right' ]"
+            raise ValueError(msg)
 
         self.offsetText.set_ha(position)
         self.offsetText.set_position((x, y))
@@ -2158,8 +2181,8 @@ class YAxis(Axis):
         majt = self.majorTicks[0]
         mT = self.minorTicks[0]
 
-        majorRight = ((not majt.tick1On) and majt.tick2On
-                      and (not majt.label1On) and majt.label2On)
+        majorRight = ((not majt.tick1On) and majt.tick2On and
+                      (not majt.label1On) and majt.label2On)
         minorRight = ((not mT.tick1On) and mT.tick2On and
                       (not mT.label1On) and mT.label2On)
         if majorRight and minorRight:

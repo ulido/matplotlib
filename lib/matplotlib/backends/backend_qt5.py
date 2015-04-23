@@ -137,7 +137,7 @@ def _create_qApp():
                 if display is None or not re.search(':\d', display):
                     raise RuntimeError('Invalid DISPLAY variable')
 
-            qApp = QtWidgets.QApplication([str(" ")])
+            qApp = QtWidgets.QApplication([six.text_type(" ")])
             qApp.lastWindowClosed.connect(qApp.quit)
         else:
             qApp = app
@@ -234,6 +234,8 @@ class FigureCanvasQT(QtWidgets.QWidget, FigureCanvasBase):
         # NB: Using super for this call to avoid a TypeError:
         # __init__() takes exactly 2 arguments (1 given) on QWidget
         # PyQt5
+        # The need for this change is documented here
+        # http://pyqt.sourceforge.net/Docs/PyQt5/pyqt4_differences.html#cooperative-multi-inheritance
         super(FigureCanvasQT, self).__init__(figure=figure)
         self.figure = figure
         self.setMouseTracking(True)
@@ -560,7 +562,7 @@ class FigureManagerQT(FigureManagerBase):
         self.window.close()
 
     def get_window_title(self):
-        return str(self.window.windowTitle())
+        return six.text_type(self.window.windowTitle())
 
     def set_window_title(self, title):
         self.window.setWindowTitle(title)
@@ -733,7 +735,7 @@ class NavigationToolbar2QT(NavigationToolbar2, QtWidgets.QToolBar):
                 self.canvas.print_figure(six.text_type(fname))
             except Exception as e:
                 QtWidgets.QMessageBox.critical(
-                    self, "Error saving file", str(e),
+                    self, "Error saving file", six.text_type(e),
                     QtWidgets.QMessageBox.Ok, QtWidgets.QMessageBox.NoButton)
 
 
@@ -849,7 +851,7 @@ def exception_handler(type, value, tb):
     if hasattr(value, 'strerror') and value.strerror is not None:
         msg += value.strerror
     else:
-        msg += str(value)
+        msg += six.text_type(value)
 
     if len(msg):
         error_msg_qt(msg)

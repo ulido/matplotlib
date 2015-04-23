@@ -345,12 +345,12 @@ class Legend(Artist):
         # We use FancyBboxPatch to draw a legend frame. The location
         # and size of the box will be updated during the drawing time.
 
-        if rcParams["legend.facecolor"] is None:
+        if rcParams["legend.facecolor"] == 'inherit':
             facecolor = rcParams["axes.facecolor"]
         else:
             facecolor = rcParams["legend.facecolor"]
 
-        if rcParams["legend.edgecolor"] is None:
+        if rcParams["legend.edgecolor"] == 'inherit':
             edgecolor = rcParams["axes.edgecolor"]
         else:
             edgecolor = rcParams["legend.edgecolor"]
@@ -813,7 +813,7 @@ class Legend(Artist):
         return self._legend_title_box._text
 
     def get_window_extent(self, *args, **kwargs):
-        'return a extent of the the legend'
+        'return a extent of the legend'
         return self.legendPatch.get_window_extent(*args, **kwargs)
 
     def get_frame_on(self):

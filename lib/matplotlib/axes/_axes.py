@@ -288,7 +288,7 @@ class Axes(_AxesBase):
 
         Parameters
         ----------
-        loc : int or string or pair of floats, default: 0
+        loc : int or string or pair of floats, default: 'upper right'
             The location of the legend. Possible codes are:
 
                 ===============   =============
@@ -758,7 +758,7 @@ class Axes(_AxesBase):
 
             >>> axvline(x=1)
 
-        * draw a default vline at *x* = .5 that spans the the middle half of
+        * draw a default vline at *x* = .5 that spans the middle half of
           the yrange::
 
             >>> axvline(x=.5, ymin=0.25, ymax=0.75)
@@ -1141,6 +1141,12 @@ class Axes(_AxesBase):
         if len(positions) == 0:
             return []
 
+        # prevent 'singular' keys from **kwargs dict from overriding the effect
+        # of 'plural' keyword arguments (e.g. 'color' overriding 'colors')
+        colors = cbook.local_over_kwdict(colors, kwargs, 'color')
+        linewidths = cbook.local_over_kwdict(linewidths, kwargs, 'linewidth')
+        linestyles = cbook.local_over_kwdict(linestyles, kwargs, 'linestyle')
+
         if not iterable(lineoffsets):
             lineoffsets = [lineoffsets]
         if not iterable(linelengths):
@@ -1365,6 +1371,12 @@ class Axes(_AxesBase):
         if not self._hold:
             self.cla()
         lines = []
+
+        # Convert "c" alias to "color" immediately, to avoid
+        # confusion farther on.
+        c = kwargs.pop('c', None)
+        if c is not None:
+            kwargs['color'] = c
 
         for line in self._get_lines(*args, **kwargs):
             self.add_line(line)
@@ -1813,11 +1825,13 @@ class Axes(_AxesBase):
         height : sequence of scalars
             the heights of the bars
 
-        width : scalar or array-like, optional, default: 0.8
+        width : scalar or array-like, optional
             the width(s) of the bars
+            default: 0.8
 
-        bottom : scalar or array-like, optional, default: None
+        bottom : scalar or array-like, optional
             the y coordinate(s) of the bars
+            default: None
 
         color : scalar or array-like, optional
             the colors of the bar faces
@@ -1825,40 +1839,53 @@ class Axes(_AxesBase):
         edgecolor : scalar or array-like, optional
             the colors of the bar edges
 
-        linewidth : scalar or array-like, optional, default: None
+        linewidth : scalar or array-like, optional
             width of bar edge(s). If None, use default
             linewidth; If 0, don't draw edges.
+            default: None
 
-        xerr : scalar or array-like, optional, default: None
+        tick_label : string or array-like, optional
+            the tick labels of the bars
+            default: None
+
+        xerr : scalar or array-like, optional
             if not None, will be used to generate errorbar(s) on the bar chart
+            default: None
 
-        yerr : scalar or array-like, optional, default: None
+        yerr : scalar or array-like, optional
             if not None, will be used to generate errorbar(s) on the bar chart
+            default: None
 
-        ecolor : scalar or array-like, optional, default: None
+        ecolor : scalar or array-like, optional
             specifies the color of errorbar(s)
+            default: None
 
-        capsize : integer, optional, default: 3
+        capsize : integer, optional
            determines the length in points of the error bar caps
+           default: 3
 
-        error_kw :
+        error_kw : dict, optional
             dictionary of kwargs to be passed to errorbar method. *ecolor* and
             *capsize* may be specified here rather than as independent kwargs.
 
-        align : ['edge' | 'center'], optional, default: 'edge'
-            If `edge`, aligns bars by their left edges (for vertical bars) and
-            by their bottom edges (for horizontal bars). If `center`, interpret
+        align : {'edge',  'center'}, optional
+            If 'edge', aligns bars by their left edges (for vertical bars) and
+            by their bottom edges (for horizontal bars). If 'center', interpret
             the `left` argument as the coordinates of the centers of the bars.
+            To align on the align bars on the right edge pass a negative
+            `width`.
 
-        orientation : 'vertical' | 'horizontal', optional, default: 'vertical'
+        orientation : {'vertical',  'horizontal'}, optional
             The orientation of the bars.
 
-        log : boolean, optional, default: False
-            If true, sets the axis to be log scale
+        log : boolean, optional
+            If true, sets the axis to be log scale.
+            default: False
 
         Returns
         -------
-        `matplotlib.patches.Rectangle` instances.
+        bars : matplotlib.container.BarContainer
+            Container with all of the bars + errorbars
 
         Notes
         -----
@@ -1891,6 +1918,9 @@ class Axes(_AxesBase):
         edgecolor = kwargs.pop('edgecolor', None)
         linewidth = kwargs.pop('linewidth', None)
 
+        tick_label = kwargs.pop('tick_label', None)
+        label_ticks_flag = tick_label is not None
+
         # Because xerr and yerr will be passed to errorbar,
         # most dimension checking and processing will be left
         # to the errorbar method.
@@ -1921,6 +1951,7 @@ class Axes(_AxesBase):
         _bottom = bottom
         bottom = make_iterable(bottom)
         linewidth = make_iterable(linewidth)
+        tick_label = make_iterable(tick_label)
 
         adjust_ylim = False
         adjust_xlim = False
@@ -1939,6 +1970,9 @@ class Axes(_AxesBase):
                 width *= nbars
             if len(bottom) == 1:
                 bottom *= nbars
+
+            tick_label_axis = self.xaxis
+            tick_label_position = left
         elif orientation == 'horizontal':
             self._process_unit_info(xdata=width, ydata=bottom, kwargs=kwargs)
             if log:
@@ -1954,11 +1988,16 @@ class Axes(_AxesBase):
                 left *= nbars
             if len(height) == 1:
                 height *= nbars
+
+            tick_label_axis = self.yaxis
+            tick_label_position = bottom
         else:
             raise ValueError('invalid orientation: %s' % orientation)
 
         if len(linewidth) < nbars:
             linewidth *= nbars
+        if len(tick_label) < nbars:
+            tick_label *= nbars
 
         if color is None:
             color = [None] * nbars
@@ -1978,19 +2017,22 @@ class Axes(_AxesBase):
             if len(edgecolor) < nbars:
                 edgecolor *= nbars
 
-        # FIXME: convert the following to proper input validation
-        # raising ValueError; don't use assert for this.
-        assert len(left) == nbars, ("incompatible sizes: argument 'left' must "
-                                    "be length %d or scalar" % nbars)
-        assert len(height) == nbars, ("incompatible sizes: argument 'height' "
-                                      "must be length %d or scalar" %
-                                      nbars)
-        assert len(width) == nbars, ("incompatible sizes: argument 'width' "
-                                     "must be length %d or scalar" %
-                                     nbars)
-        assert len(bottom) == nbars, ("incompatible sizes: argument 'bottom' "
-                                      "must be length %d or scalar" %
-                                      nbars)
+        # input validation
+        if len(left) != nbars:
+            raise ValueError("incompatible sizes: argument 'left' must "
+                             "be length %d or scalar" % nbars)
+        if len(height) != nbars:
+            raise ValueError("incompatible sizes: argument 'height' "
+                              "must be length %d or scalar" % nbars)
+        if len(width) != nbars:
+            raise ValueError("incompatible sizes: argument 'width' "
+                             "must be length %d or scalar" % nbars)
+        if len(bottom) != nbars:
+            raise ValueError("incompatible sizes: argument 'bottom' "
+                             "must be length %d or scalar" % nbars)
+        if len(tick_label) != nbars:
+            raise ValueError("incompatible sizes: argument 'tick_label' "
+                             "must be length %d or string" % nbars)
 
         patches = []
 
@@ -2086,6 +2128,10 @@ class Axes(_AxesBase):
         bar_container = BarContainer(patches, errorbar, label=label)
         self.add_container(bar_container)
 
+        if label_ticks_flag:
+            tick_label_axis.set_ticks(tick_label_position)
+            tick_label_axis.set_ticklabels(tick_label)
+
         return bar_container
 
     @docstring.dedent_interpd
@@ -2130,6 +2176,9 @@ class Axes(_AxesBase):
         linewidth : scalar or array-like, optional, default: None
             width of bar edge(s). If None, use default
             linewidth; If 0, don't draw edges.
+
+        tick_label : string or array-like, optional, default: None
+            the tick labels of the bars
 
         xerr : scalar or array-like, optional, default: None
             if not None, will be used to generate errorbar(s) on the bar chart
@@ -2428,8 +2477,10 @@ class Axes(_AxesBase):
             labels = [''] * len(x)
         if explode is None:
             explode = [0] * len(x)
-        assert(len(x) == len(labels))
-        assert(len(x) == len(explode))
+        if len(x) != len(labels):
+            raise ValueError("'label' must be of length 'x'")
+        if len(x) != len(explode):
+            raise ValueError("'explode' must be of length 'x'")
         if colors is None:
             colors = ('b', 'g', 'r', 'c', 'm', 'y', 'k', 'w')
 
@@ -2807,7 +2858,7 @@ class Axes(_AxesBase):
 
         if yerr is not None:
             if (iterable(yerr) and len(yerr) == 2 and
-                iterable(yerr[0]) and iterable(yerr[1])):
+                    iterable(yerr[0]) and iterable(yerr[1])):
                 # using list comps rather than arrays to preserve units
                 lower = [thisy - thiserr for (thisy, thiserr)
                          in cbook.safezip(y, yerr[0])]
@@ -3066,8 +3117,7 @@ class Axes(_AxesBase):
             # compatibility
             if sym == '':
                 # blow away existing dict and make one for invisible markers
-                flierprops = dict(linestyle='none', marker='',
-                    color='none')
+                flierprops = dict(linestyle='none', marker='', color='none')
                 # turn the fliers off just to be safe
                 showfliers = False
             # now process the symbol string
@@ -3088,7 +3138,7 @@ class Axes(_AxesBase):
         # replace medians if necessary:
         if usermedians is not None:
             if (len(np.ravel(usermedians)) != len(bxpstats) or
-                 np.shape(usermedians)[0] != len(bxpstats)):
+                    np.shape(usermedians)[0] != len(bxpstats)):
                 medmsg = 'usermedians length not compatible with x'
                 raise ValueError(medmsg)
             else:
@@ -3687,8 +3737,9 @@ class Axes(_AxesBase):
         collection.update(kwargs)
 
         if colors is None:
-            if norm is not None:
-                assert(isinstance(norm, mcolors.Normalize))
+            if norm is not None and not isinstance(norm, mcolors.Normalize):
+                msg = "'norm' must be an instance of 'mcolors.Normalize'"
+                raise ValueError(msg)
             collection.set_array(np.asarray(c))
             collection.set_cmap(cmap)
             collection.set_norm(norm)
@@ -3878,10 +3929,9 @@ class Axes(_AxesBase):
         if extent is not None:
             xmin, xmax, ymin, ymax = extent
         else:
-            xmin = np.amin(x)
-            xmax = np.amax(x)
-            ymin = np.amin(y)
-            ymax = np.amax(y)
+            xmin, xmax = (np.amin(x), np.amax(x)) if len(x) else (0, 1)
+            ymin, ymax = (np.amin(y), np.amax(y)) if len(y) else (0, 1)
+
             # to avoid issues with singular data, expand the min/max pairs
             xmin, xmax = mtrans.nonsingular(xmin, xmax, expander=0.1)
             ymin, ymax = mtrans.nonsingular(ymin, ymax, expander=0.1)
@@ -4058,8 +4108,9 @@ class Axes(_AxesBase):
             bins = np.sort(bins)
             accum = bins.searchsorted(accum)
 
-        if norm is not None:
-            assert(isinstance(norm, mcolors.Normalize))
+        if norm is not None and not isinstance(norm, mcolors.Normalize):
+            msg = "'norm' must be an instance of 'mcolors.Normalize'"
+            raise ValueError(msg)
         collection.set_array(accum)
         collection.set_cmap(cmap)
         collection.set_norm(norm)
@@ -4664,6 +4715,12 @@ class Axes(_AxesBase):
         --------
         matshow : Plot a matrix or an array as an image.
 
+        Notes
+        -----
+        Unless *extent* is used, pixel centers will be located at integer
+        coordinates. In other words: the origin will coincide with the center
+        of pixel (0, 0).
+
         Examples
         --------
 
@@ -4674,14 +4731,15 @@ class Axes(_AxesBase):
         if not self._hold:
             self.cla()
 
-        if norm is not None:
-            assert(isinstance(norm, mcolors.Normalize))
+        if norm is not None and not isinstance(norm, mcolors.Normalize):
+            msg = "'norm' must be an instance of 'mcolors.Normalize'"
+            raise ValueError(msg)
         if aspect is None:
             aspect = rcParams['image.aspect']
         self.set_aspect(aspect)
         im = mimage.AxesImage(self, cmap, norm, interpolation, origin, extent,
-                       filternorm=filternorm,
-                       filterrad=filterrad, resample=resample, **kwargs)
+                              filternorm=filternorm, filterrad=filterrad,
+                              resample=resample, **kwargs)
 
         im.set_data(X)
         im.set_alpha(alpha)
@@ -4792,7 +4850,7 @@ class Axes(_AxesBase):
         than those of *C*; if the dimensions are the same, then the
         last row and column of *C* will be ignored.
 
-        Note that the the column index corresponds to the
+        Note that the column index corresponds to the
         *x*-coordinate, and the row index corresponds to *y*; for
         details, see the :ref:`Grid Orientation
         <axes-pcolor-grid-orientation>` section below.
@@ -4966,7 +5024,7 @@ class Axes(_AxesBase):
                              X3[:, newaxis], Y3[:, newaxis],
                              X4[:, newaxis], Y4[:, newaxis],
                              X1[:, newaxis], Y1[:, newaxis]),
-                             axis=1)
+                            axis=1)
         verts = xy.reshape((npoly, 5, 2))
 
         C = compress(ravelmask, ma.filled(C[0:Ny - 1, 0:Nx - 1]).ravel())
@@ -4992,7 +5050,7 @@ class Axes(_AxesBase):
         if 'antialiased' in kwargs:
             kwargs['antialiaseds'] = kwargs.pop('antialiased')
         if 'antialiaseds' not in kwargs and (is_string_like(ec) and
-                ec.lower() == "none"):
+                                             ec.lower() == "none"):
             kwargs['antialiaseds'] = False
 
         kwargs.setdefault('snap', False)
@@ -5001,8 +5059,9 @@ class Axes(_AxesBase):
 
         collection.set_alpha(alpha)
         collection.set_array(C)
-        if norm is not None:
-            assert(isinstance(norm, mcolors.Normalize))
+        if norm is not None and not isinstance(norm, mcolors.Normalize):
+            msg = "'norm' must be an instance of 'mcolors.Normalize'"
+            raise ValueError(msg)
         collection.set_cmap(cmap)
         collection.set_norm(norm)
         collection.set_clim(vmin, vmax)
@@ -5014,8 +5073,8 @@ class Axes(_AxesBase):
 
         # Transform from native to data coordinates?
         t = collection._transform
-        if (not isinstance(t, mtransforms.Transform)
-            and hasattr(t, '_as_mpl_transform')):
+        if (not isinstance(t, mtransforms.Transform) and
+            hasattr(t, '_as_mpl_transform')):
             t = t._as_mpl_transform(self.axes)
 
         if t and any(t.contains_branch_seperately(self.transData)):
@@ -5150,8 +5209,9 @@ class Axes(_AxesBase):
             antialiased=antialiased, shading=shading, **kwargs)
         collection.set_alpha(alpha)
         collection.set_array(C)
-        if norm is not None:
-            assert(isinstance(norm, mcolors.Normalize))
+        if norm is not None and not isinstance(norm, mcolors.Normalize):
+            msg = "'norm' must be an instance of 'mcolors.Normalize'"
+            raise ValueError(msg)
         collection.set_cmap(cmap)
         collection.set_norm(norm)
         collection.set_clim(vmin, vmax)
@@ -5161,8 +5221,8 @@ class Axes(_AxesBase):
 
         # Transform from native to data coordinates?
         t = collection._transform
-        if (not isinstance(t, mtransforms.Transform)
-            and hasattr(t, '_as_mpl_transform')):
+        if (not isinstance(t, mtransforms.Transform) and
+            hasattr(t, '_as_mpl_transform')):
             t = t._as_mpl_transform(self.axes)
 
         if t and any(t.contains_branch_seperately(self.transData)):
@@ -5238,7 +5298,7 @@ class Axes(_AxesBase):
         produce faster and more compact output using ps, pdf, and
         svg backends, however.
 
-        Note that the the column index corresponds to the x-coordinate,
+        Note that the column index corresponds to the x-coordinate,
         and the row index corresponds to y; for details, see
         the "Grid Orientation" section below.
 
@@ -5275,8 +5335,9 @@ class Axes(_AxesBase):
         cmap = kwargs.pop('cmap', None)
         vmin = kwargs.pop('vmin', None)
         vmax = kwargs.pop('vmax', None)
-        if norm is not None:
-            assert(isinstance(norm, mcolors.Normalize))
+        if norm is not None and not isinstance(norm, mcolors.Normalize):
+            msg = "'norm' must be an instance of 'mcolors.Normalize'"
+            raise ValueError(msg)
 
         C = args[-1]
         nr, nc = C.shape
@@ -5310,8 +5371,9 @@ class Axes(_AxesBase):
 
             # convert to one dimensional arrays
             # This should also be moved to the QuadMesh class
-            C = ma.ravel(C)  # data point in each cell is value
-                             # at lower left corner
+
+            # data point in each cell is value at lower left corner
+            C = ma.ravel(C)
             X = x.ravel()
             Y = y.ravel()
             Nx = nc + 1
@@ -5638,12 +5700,14 @@ class Axes(_AxesBase):
 
         # basic input validation
         flat = np.ravel(x)
-        if len(flat) == 0:
-            raise ValueError("x must have at least one data point")
+
+        input_empty = len(flat) == 0
 
         # Massage 'x' for processing.
         # NOTE: Be sure any changes here is also done below to 'weights'
-        if isinstance(x, np.ndarray) or not iterable(x[0]):
+        if input_empty:
+            x = np.array([[]])
+        elif isinstance(x, np.ndarray) or not iterable(x[0]):
             # TODO: support masked arrays;
             x = np.asarray(x)
             if x.ndim == 2:
@@ -5698,7 +5762,7 @@ class Axes(_AxesBase):
         # If bins are not specified either explicitly or via range,
         # we need to figure out the range required for all datasets,
         # and supply that to np.histogram.
-        if not binsgiven:
+        if not binsgiven and not input_empty:
             xmin = np.inf
             xmax = -np.inf
             for xi in x:
@@ -5903,17 +5967,18 @@ class Axes(_AxesBase):
                     if np.sum(m) > 0:  # make sure there are counts
                         xmin = np.amin(m[m != 0])
                         # filter out the 0 height bins
-                xmin = max(xmin*0.9, minimum)
+                xmin = max(xmin*0.9, minimum) if not input_empty else minimum
                 xmin = min(xmin0, xmin)
                 self.dataLim.intervalx = (xmin, xmax)
             elif orientation == 'vertical':
                 ymin0 = max(_saved_bounds[1]*0.9, minimum)
                 ymax = self.dataLim.intervaly[1]
+
                 for m in n:
                     if np.sum(m) > 0:  # make sure there are counts
                         ymin = np.amin(m[m != 0])
                         # filter out the 0 height bins
-                ymin = max(ymin*0.9, minimum)
+                ymin = max(ymin*0.9, minimum) if not input_empty else minimum
                 ymin = min(ymin0, ymin)
                 self.dataLim.intervaly = (ymin, ymax)
 

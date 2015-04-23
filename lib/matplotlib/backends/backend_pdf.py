@@ -37,7 +37,6 @@ from matplotlib.backend_bases import RendererBase, GraphicsContextBase,\
 from matplotlib.backends.backend_mixed import MixedModeRenderer
 from matplotlib.cbook import Bunch, is_string_like, \
     get_realpath_and_stat, is_writable_file_like, maxdict
-from matplotlib.mlab import quad2cubic
 from matplotlib.figure import Figure
 from matplotlib.font_manager import findfont, is_opentype_cff_font
 from matplotlib.afm import AFM
@@ -48,6 +47,7 @@ from matplotlib.ft2font import FT2Font, FIXED_WIDTH, ITALIC, LOAD_NO_SCALE, \
 from matplotlib.mathtext import MathTextParser
 from matplotlib.transforms import Affine2D, BboxBase
 from matplotlib.path import Path
+from matplotlib import _path
 from matplotlib import ttconv
 
 # Overview
@@ -287,6 +287,17 @@ class Operator(object):
     def pdfRepr(self):
         return self.op
 
+
+class Verbatim(object):
+    """Store verbatim PDF command content for later inclusion in the
+    stream."""
+    def __init__(self, x):
+        self._x = x
+
+    def pdfRepr(self):
+        return self._x
+
+
 # PDF operators (not an exhaustive list)
 _pdfops = dict(
     close_fill_stroke=b'b', fill_stroke=b'B', fill=b'f', closepath=b'h',
@@ -465,8 +476,8 @@ class PdfFile(object):
         self.fontNames = {}     # maps filenames to internal font names
         self.nextFont = 1       # next free internal font name
         self.dviFontInfo = {}   # information on dvi fonts
-        self.type1Descriptors = {}  # differently encoded Type-1 fonts may
-                                    # share the same descriptor
+        # differently encoded Type-1 fonts may share the same descriptor
+        self.type1Descriptors = {}
         self.used_characters = {}
 
         self.alphaStates = {}   # maps alpha values to graphics state objects
@@ -769,7 +780,7 @@ class PdfFile(object):
             'FontFamily':  t1font.prop['FamilyName'],
             'StemV':       50,  # TODO
             # (see also revision 3874; but not all TeX distros have AFM files!)
-            #'FontWeight': a number where 400 = Regular, 700 = Bold
+            # 'FontWeight': a number where 400 = Regular, 700 = Bold
             }
 
         self.writeObject(fontdescObject, descriptor)
@@ -1251,8 +1262,8 @@ end"""
         self.images[image] = (name, ob)
         return name
 
-    ## These two from backend_ps.py
-    ## TODO: alpha (SMask, p. 518 of pdf spec)
+    # These two from backend_ps.py
+    # TODO: alpha (SMask, p. 518 of pdf spec)
 
     def _rgb(self, im):
         h, w, s = im.as_rgba_str()
@@ -1388,32 +1399,11 @@ end"""
 
     @staticmethod
     def pathOperations(path, transform, clip=None, simplify=None, sketch=None):
-        cmds = []
-        last_points = None
-        for points, code in path.iter_segments(transform, clip=clip,
-                                               simplify=simplify,
-                                               sketch=sketch):
-            if code == Path.MOVETO:
-                # This is allowed anywhere in the path
-                cmds.extend(points)
-                cmds.append(Op.moveto)
-            elif code == Path.CLOSEPOLY:
-                cmds.append(Op.closepath)
-            elif last_points is None:
-                # The other operations require a previous point
-                raise ValueError('Path lacks initial MOVETO')
-            elif code == Path.LINETO:
-                cmds.extend(points)
-                cmds.append(Op.lineto)
-            elif code == Path.CURVE3:
-                points = quad2cubic(*(list(last_points[-2:]) + list(points)))
-                cmds.extend(points[2:])
-                cmds.append(Op.curveto)
-            elif code == Path.CURVE4:
-                cmds.extend(points)
-                cmds.append(Op.curveto)
-            last_points = points
-        return cmds
+        return [Verbatim(_path.convert_to_string(
+            path, transform, clip, simplify, sketch,
+            6,
+            [Op.moveto.op, Op.lineto.op, b'', Op.curveto.op, Op.closepath.op],
+            True))]
 
     def writePath(self, path, transform, clip=False, sketch=None):
         if clip:
@@ -1475,6 +1465,7 @@ end"""
 
         check_trapped = (lambda x: isinstance(x, Name) and
                          x.name in ('True', 'False', 'Unknown'))
+
         keywords = {'Title': is_string_like,
                     'Author': is_string_like,
                     'Subject': is_string_like,
@@ -1575,6 +1566,13 @@ class RendererPdf(RendererBase):
         pdf backend support arbitrary scaling of image.
         """
         return True
+
+    def option_image_nocomposite(self):
+        """
+        return whether to generate a composite image from multiple images on
+        a set of axes
+        """
+        return not rcParams['image.composite_image']
 
     def draw_image(self, gc, x, y, im, dx=None, dy=None, transform=None):
         self.check_gc(gc)
@@ -1710,10 +1708,8 @@ class RendererPdf(RendererBase):
                 simplify=False):
             if len(vertices):
                 x, y = vertices[-2:]
-                if (x < 0 or
-                    y < 0 or
-                    x > self.file.width * 72 or
-                    y > self.file.height * 72):
+                if (x < 0 or y < 0 or
+                        x > self.file.width * 72 or y > self.file.height * 72):
                     continue
                 dx, dy = x - lastx, y - lasty
                 output(1, 0, 0, 1, dx, dy, Op.concat_matrix,
@@ -1970,8 +1966,8 @@ class RendererPdf(RendererBase):
                             chunks[-1][1].append(c)
                         else:
                             chunks.append((char_type, [c]))
-                    use_simple_method = (len(chunks) == 1
-                                         and chunks[-1][0] == 1)
+                    use_simple_method = (len(chunks) == 1 and
+                                         chunks[-1][0] == 1)
             return use_simple_method, chunks
 
         def draw_text_simple():
@@ -2255,7 +2251,7 @@ class GraphicsContextPdf(GraphicsContextBase):
             cmds.extend(self.pop())
         # Unless we hit the right one, set the clip polygon
         if ((self._cliprect, self._clippath) != (cliprect, clippath) or
-            self.parent is None):
+                self.parent is None):
             cmds.extend(self.push())
             if self._cliprect != cliprect:
                 cmds.extend([cliprect, Op.rectangle, Op.clip, Op.endpath])
@@ -2417,8 +2413,8 @@ class PdfPages(object):
         PDF file.
         """
         self._file.close()
-        if (self.get_pagecount() == 0 and not self.keep_empty
-                and not self._file.passed_in_file_object):
+        if (self.get_pagecount() == 0 and not self.keep_empty and
+                not self._file.passed_in_file_object):
             os.remove(self._file.fh.name)
         self._file = None
 
